@@ -75,11 +75,17 @@ async def search_notes(query: str, limit: int = 20) -> str:
     """Search Joplin notes by keyword. Returns matching note titles and ids."""
     allowed = await _require_allowlist()
     notes = await get_client().search_notes(query, limit=limit)
-    notes = [n for n in notes if n["parent_id"] in allowed]
-    if not notes:
+    in_scope = [n for n in notes if n["parent_id"] in allowed]
+    if not in_scope:
+        if notes:
+            scope = os.environ.get("JOPLIN_ALLOWED_NOTEBOOKS", "")
+            return (
+                f"Found {len(notes)} note(s) matching '{query}', but none are "
+                f"in allowed notebooks (JOPLIN_ALLOWED_NOTEBOOKS={scope!r})."
+            )
         return f"No notes found matching '{query}'."
-    lines = [f"- {n['title']} (id: {n['id']})" for n in notes]
-    return f"Found {len(notes)} note(s) matching '{query}':\n" + "\n".join(lines)
+    lines = [f"- {n['title']} (id: {n['id']})" for n in in_scope]
+    return f"Found {len(in_scope)} note(s) matching '{query}':\n" + "\n".join(lines)
 
 
 @mcp.tool
