@@ -24,7 +24,8 @@ Web Clipper REST API.
    and pass `--env-file .env` to `uv run` instead — see below.
 3. Install [uv](https://docs.astral.sh/uv/) if you don't have it.
 4. Set `JOPLIN_ALLOWED_NOTEBOOKS` to a comma-separated list of notebook ids
-   (get these from `list_notebooks`) — see **Access control** below.
+   and/or names (get these from `list_notebooks`) — see **Access control**
+   below.
 
 ## Running it
 
@@ -110,10 +111,19 @@ the raw request/response before trusting it to a model.
 
 `search_notes`, `get_note`, `create_note`, and `update_note` are scoped to
 notebooks listed in `JOPLIN_ALLOWED_NOTEBOOKS` (comma-separated notebook
-ids). This is fail-closed: if the variable is unset or empty, all four
-tools refuse to operate. `list_notebooks` is unaffected since it only
-returns notebook metadata, not note content, and doubles as the way to
-find the ids to allowlist in the first place.
+ids and/or names). This is fail-closed: if the variable is unset, empty,
+or none of its entries match a real notebook, all four tools refuse to
+operate. `list_notebooks` is unaffected since it only returns notebook
+metadata, not note content, and doubles as the way to find the ids/names
+to allowlist in the first place.
+
+Name matching is case-insensitive (`Tech`, `tech`, and `TECH` are
+equivalent) and resolved against the live notebook list on each call, so
+a rename takes effect immediately. Since Joplin doesn't require notebook
+names to be unique (nested notebooks can share a title), a name that
+matches more than one notebook allows all of them — use the notebook id
+instead (from `list_notebooks`) if you need to scope to just one of
+several same-named notebooks.
 
 Set `JOPLIN_ALLOWED_NOTEBOOKS=*` to explicitly allow all notebooks. This
 is a deliberate opt-in, distinct from leaving the variable unset.

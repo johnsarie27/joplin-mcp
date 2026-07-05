@@ -29,22 +29,43 @@ class _AllowAll:
         return True
 
 
-def _allowed_notebooks() -> frozenset[str] | _AllowAll:
+async def _allowed_notebooks() -> frozenset[str] | _AllowAll:
+    # JOPLIN_ALLOWED_NOTEBOOKS entries may be notebook ids or names (case-
+    # insensitive); names are resolved against the live notebook list since
+    # they aren't guaranteed unique (nested notebooks can share a title) -
+    # a name matching more than one notebook allows all of them.
     raw = os.environ.get("JOPLIN_ALLOWED_NOTEBOOKS", "")
     parts = frozenset(part.strip() for part in raw.split(",") if part.strip())
+    if not parts:
+        return parts
     if "*" in parts:
         return _AllowAll()
-    return parts
+
+    notebooks = await get_client().list_notebooks()
+    ids = {n["id"] for n in notebooks}
+    by_name: dict[str, set[str]] = {}
+    for n in notebooks:
+        by_name.setdefault(n["title"].casefold(), set()).add(n["id"])
+
+    resolved: set[str] = set()
+    for part in parts:
+        if part in ids:
+            resolved.add(part)
+        else:
+            resolved |= by_name.get(part.casefold(), set())
+    return frozenset(resolved)
 
 
-def _require_allowlist() -> frozenset[str] | _AllowAll:
+async def _require_allowlist() -> frozenset[str] | _AllowAll:
     # Fail-closed: note-content tools refuse to operate until an allowlist
     # is explicitly configured, rather than defaulting to unrestricted access.
-    allowed = _allowed_notebooks()
+    allowed = await _allowed_notebooks()
     if not allowed:
         raise NotebookAccessError(
-            "No notebooks are allowlisted. Set JOPLIN_ALLOWED_NOTEBOOKS to a "
-            "comma-separated list of notebook ids to enable note access."
+            "No notebooks are allowlisted (or none of the configured "
+            "JOPLIN_ALLOWED_NOTEBOOKS entries matched a real notebook id or "
+            "name). Set JOPLIN_ALLOWED_NOTEBOOKS to a comma-separated list "
+            "of notebook ids and/or names, or '*' for all."
         )
     return allowed
 
@@ -52,7 +73,7 @@ def _require_allowlist() -> frozenset[str] | _AllowAll:
 @mcp.tool
 async def search_notes(query: str, limit: int = 20) -> str:
     """Search Joplin notes by keyword. Returns matching note titles and ids."""
-    allowed = _require_allowlist()
+    allowed = await _require_allowlist()
     notes = await get_client().search_notes(query, limit=limit)
     notes = [n for n in notes if n["parent_id"] in allowed]
     if not notes:
@@ -64,7 +85,7 @@ async def search_notes(query: str, limit: int = 20) -> str:
 @mcp.tool
 async def get_note(note_id: str) -> str:
     """Fetch the full content of a single Joplin note by its id."""
-    allowed = _require_allowlist()
+    allowed = await _require_allowlist()
     note = await get_client().get_note(note_id)
     if note["parent_id"] not in allowed:
         raise NotebookAccessError(
@@ -81,7 +102,7 @@ async def get_note(note_id: str) -> str:
 @mcp.tool
 async def create_note(title: str, body: str, notebook_id: str) -> str:
     """Create a new note in the given notebook. Use list_notebooks to find a notebook_id."""
-    allowed = _require_allowlist()
+    allowed = await _require_allowlist()
     if notebook_id not in allowed:
         raise NotebookAccessError(
             f"Notebook '{notebook_id}' is not in JOPLIN_ALLOWED_NOTEBOOKS."
@@ -93,7 +114,7 @@ async def create_note(title: str, body: str, notebook_id: str) -> str:
 @mcp.tool
 async def update_note(note_id: str, title: str | None = None, body: str | None = None) -> str:
     """Update an existing note's title and/or body. Only provided fields are changed."""
-    allowed = _require_allowlist()
+    allowed = await _require_allowlist()
     existing = await get_client().get_note(note_id)
     if existing["parent_id"] not in allowed:
         raise NotebookAccessError(
