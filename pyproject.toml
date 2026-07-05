@@ -1,0 +1,19 @@
+[project]
+name = "joplin-mcp"
+version = "0.1.0"
+description = "MCP server for Joplin note-taking app"
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "httpx>=0.27.0",
+]
+
+[project.scripts]
+joplin-mcp-server = "joplin_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/joplin_mcp"]
