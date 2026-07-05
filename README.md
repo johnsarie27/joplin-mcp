@@ -42,23 +42,60 @@ exporting them in your shell:
 uv run --env-file .env --directory /path/to/joplin-mcp joplin-mcp-server
 ```
 
-## Wiring into an MCP client (Claude Desktop / Claude Code)
+## Wiring into an MCP client
 
-Add to your MCP client config:
+Both approaches below point `uv` at the `.env` file rather than duplicating
+`JOPLIN_TOKEN`/`JOPLIN_ALLOWED_NOTEBOOKS` into the client config — one
+source of truth for secrets.
+
+### Claude Code
+
+```bash
+claude mcp add joplin -s user -- uv run --env-file /path/to/joplin-mcp/.env --directory /path/to/joplin-mcp joplin-mcp-server
+```
+
+`-s user` registers it at user scope, so it's available in every Claude
+Code session, not just this repo. Verify with `claude mcp get joplin`;
+remove with `claude mcp remove joplin -s user`.
+
+### Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
+(macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows), adding:
 
 ```json
 {
   "mcpServers": {
     "joplin": {
       "command": "uv",
-      "args": ["run", "--directory", "/path/to/joplin-mcp", "joplin-mcp-server"],
-      "env": {
-        "JOPLIN_TOKEN": "paste-your-token-here"
-      }
+      "args": ["run", "--env-file", "/path/to/joplin-mcp/.env", "--directory", "/path/to/joplin-mcp", "joplin-mcp-server"]
     }
   }
 }
 ```
+
+Fully quit and restart Claude Desktop afterward — it only picks up config
+changes on launch. This is the schema documented at
+[support.claude.com](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)
+and [modelcontextprotocol.io](https://modelcontextprotocol.io/docs/develop/connect-local-servers).
+Some Claude Desktop builds manage MCP servers through a Settings UI
+(Extensions/Connectors) instead of this file directly — check there first
+if the file on disk doesn't have an `mcpServers` key already.
+
+### Migrating to `uvx` later
+
+Once this repo is stable and pushed, the local `uv run --directory ...`
+invocation above can be replaced with:
+
+```bash
+uvx --from git+https://github.com/johnsarie27/joplin-mcp@<pinned-sha> joplin-mcp-server
+```
+
+pinning `<pinned-sha>` to a specific commit per the SHA-pinning convention,
+so client configs aren't silently pulling `main` on every run. No local
+checkout needed at that point — just swap the `command`/`args` in whichever
+client config above to `uvx`/`--from git+...` instead of `uv`/`run --env-file
+... --directory ...`.
 
 ## Testing standalone (recommended before wiring into a client)
 
