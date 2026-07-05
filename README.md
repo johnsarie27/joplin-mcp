@@ -20,6 +20,8 @@ Web Clipper REST API.
    ```
    export JOPLIN_TOKEN="paste-your-token-here"
    ```
+   Or drop it into the `.env` file at the repo root (already gitignored)
+   and pass `--env-file .env` to `uv run` instead — see below.
 3. Install [uv](https://docs.astral.sh/uv/) if you don't have it.
 
 ## Running it
@@ -29,6 +31,13 @@ on first run.
 
 ```bash
 uv run --directory /path/to/joplin-mcp joplin-mcp-server
+```
+
+To load `JOPLIN_TOKEN` (and friends) from the `.env` file instead of
+exporting them in your shell:
+
+```bash
+uv run --env-file .env --directory /path/to/joplin-mcp joplin-mcp-server
 ```
 
 ## Wiring into an MCP client (Claude Desktop / Claude Code)
@@ -52,7 +61,7 @@ Add to your MCP client config:
 ## Testing standalone (recommended before wiring into a client)
 
 ```bash
-npx @modelcontextprotocol/inspector uv run --directory /path/to/joplin-mcp joplin-mcp-server
+npx @modelcontextprotocol/inspector uv run --env-file .env --directory /path/to/joplin-mcp joplin-mcp-server
 ```
 
 This opens a local web UI where you can call each tool manually and see
@@ -66,3 +75,12 @@ the raw request/response before trusting it to a model.
   (`localhost` / `41184`) if needed.
 - Errors from the Joplin API surface as `JoplinError` with the raw
   status/body — check these first if a tool call fails.
+
+## References
+
+- [Joplin Data API](https://joplinapp.org/help/api/references/rest_api/)
+
+## Related projects
+
+- [alondmnt/joplin-mcp](https://github.com/alondmnt/joplin-mcp)
+- [dweigend/joplin-mcp-server](https://github.com/dweigend/joplin-mcp-server)
