@@ -23,6 +23,8 @@ Web Clipper REST API.
    Or drop it into the `.env` file at the repo root (already gitignored)
    and pass `--env-file .env` to `uv run` instead — see below.
 3. Install [uv](https://docs.astral.sh/uv/) if you don't have it.
+4. Set `JOPLIN_ALLOWED_NOTEBOOKS` to a comma-separated list of notebook ids
+   (get these from `list_notebooks`) — see **Access control** below.
 
 ## Running it
 
@@ -66,6 +68,21 @@ npx @modelcontextprotocol/inspector uv run --env-file .env --directory /path/to/
 
 This opens a local web UI where you can call each tool manually and see
 the raw request/response before trusting it to a model.
+
+## Access control
+
+`search_notes`, `get_note`, `create_note`, and `update_note` are scoped to
+notebooks listed in `JOPLIN_ALLOWED_NOTEBOOKS` (comma-separated notebook
+ids). This is fail-closed: if the variable is unset or empty, all four
+tools refuse to operate. `list_notebooks` is unaffected since it only
+returns notebook metadata, not note content, and doubles as the way to
+find the ids to allowlist in the first place.
+
+Set `JOPLIN_ALLOWED_NOTEBOOKS=*` to explicitly allow all notebooks. This
+is a deliberate opt-in, distinct from leaving the variable unset.
+
+Out-of-scope access raises a `NotebookAccessError` with a message naming
+the notebook, distinct from a `JoplinError` (an actual Joplin API failure).
 
 ## Notes on this build
 
