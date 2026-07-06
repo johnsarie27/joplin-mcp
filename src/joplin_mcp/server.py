@@ -1,45 +1,95 @@
 """FastMCP server exposing Joplin note operations as MCP tools."""
 
-import os
 from functools import lru_cache
 
 from fastmcp import FastMCP
 
 from joplin_mcp.client import JoplinClient
+from joplin_mcp.config import VALID_ACCESS_LEVELS, load_config
 
 mcp = FastMCP("joplin")
 
 
 class NotebookAccessError(Exception):
-    """Raised when a note/notebook falls outside JOPLIN_ALLOWED_NOTEBOOKS."""
+    """Raised when a note/notebook falls outside the configured access."""
 
 
 @lru_cache
 def get_client() -> JoplinClient:
     # Cached so we reuse one client/token for the life of the process,
-    # but constructed lazily so a missing token fails at first tool call
-    # (with a clear error) rather than at import time.
-    return JoplinClient()
+    # but constructed lazily so a missing/invalid config fails at first
+    # tool call (with a clear error) rather than at import time.
+    config = load_config()
+    return JoplinClient(
+        token=config.get("token", ""),
+        host=config.get("host", "localhost"),
+        port=str(config.get("port", "41184")),
+    )
 
 
-class _AllowAll:
-    """Sentinel returned when JOPLIN_ALLOWED_NOTEBOOKS is set to '*'."""
+class NotebookAccess:
+    """Resolved read/write notebook access from the config's `notebooks` list."""
 
-    def __contains__(self, notebook_id: object) -> bool:
-        return True
+    def __init__(
+        self,
+        read_all: bool,
+        write_all: bool,
+        read_ids: frozenset[str],
+        write_ids: frozenset[str],
+    ) -> None:
+        self._read_all = read_all or write_all
+        self._write_all = write_all
+        self._read_ids = read_ids
+        self._write_ids = write_ids
+
+    def can_read(self, notebook_id: str) -> bool:
+        return self._read_all or notebook_id in self._read_ids or notebook_id in self._write_ids
+
+    def can_write(self, notebook_id: str) -> bool:
+        return self._write_all or notebook_id in self._write_ids
+
+    def __bool__(self) -> bool:
+        return self._read_all or self._write_all or bool(self._read_ids) or bool(self._write_ids)
 
 
-async def _allowed_notebooks() -> frozenset[str] | _AllowAll:
-    # JOPLIN_ALLOWED_NOTEBOOKS entries may be notebook ids or names (case-
-    # insensitive); names are resolved against the live notebook list since
-    # they aren't guaranteed unique (nested notebooks can share a title) -
-    # a name matching more than one notebook allows all of them.
-    raw = os.environ.get("JOPLIN_ALLOWED_NOTEBOOKS", "")
-    parts = frozenset(part.strip() for part in raw.split(",") if part.strip())
-    if not parts:
-        return parts
-    if "*" in parts:
-        return _AllowAll()
+async def _notebook_access() -> NotebookAccess:
+    # Each `notebooks` entry is {"id": <notebook id or name>, "access": "read"|"write"}.
+    # "id" may be "*" to mean all notebooks. Entries may be a name rather than an
+    # id (names aren't guaranteed unique - nested notebooks can share a title -
+    # resolved against the live notebook list since a name matching more than
+    # one notebook grants that access level to all of them). Missing "access"
+    # defaults to "read".
+    config = load_config()
+    entries = config.get("notebooks", [])
+    if not entries:
+        return NotebookAccess(False, False, frozenset(), frozenset())
+
+    read_all = False
+    write_all = False
+    raw_read: set[str] = set()
+    raw_write: set[str] = set()
+    for entry in entries:
+        raw_id = str(entry.get("id", "")).strip()
+        access = entry.get("access", "read")
+        if access not in VALID_ACCESS_LEVELS:
+            raise NotebookAccessError(
+                f"Invalid access level {access!r} for notebook {raw_id!r} in "
+                f"config (must be one of {sorted(VALID_ACCESS_LEVELS)})."
+            )
+        if not raw_id:
+            continue
+        if raw_id == "*":
+            if access == "write":
+                write_all = True
+            else:
+                read_all = True
+        elif access == "write":
+            raw_write.add(raw_id)
+        else:
+            raw_read.add(raw_id)
+
+    if not (raw_read or raw_write):
+        return NotebookAccess(read_all, write_all, frozenset(), frozenset())
 
     notebooks = await get_client().list_notebooks()
     ids = {n["id"] for n in notebooks}
@@ -47,41 +97,42 @@ async def _allowed_notebooks() -> frozenset[str] | _AllowAll:
     for n in notebooks:
         by_name.setdefault(n["title"].casefold(), set()).add(n["id"])
 
-    resolved: set[str] = set()
-    for part in parts:
-        if part in ids:
-            resolved.add(part)
-        else:
-            resolved |= by_name.get(part.casefold(), set())
-    return frozenset(resolved)
+    def resolve(parts: set[str]) -> frozenset[str]:
+        resolved: set[str] = set()
+        for part in parts:
+            if part in ids:
+                resolved.add(part)
+            else:
+                resolved |= by_name.get(part.casefold(), set())
+        return frozenset(resolved)
+
+    return NotebookAccess(read_all, write_all, resolve(raw_read), resolve(raw_write))
 
 
-async def _require_allowlist() -> frozenset[str] | _AllowAll:
-    # Fail-closed: note-content tools refuse to operate until an allowlist
+async def _require_access() -> NotebookAccess:
+    # Fail-closed: note-content tools refuse to operate until notebook access
     # is explicitly configured, rather than defaulting to unrestricted access.
-    allowed = await _allowed_notebooks()
-    if not allowed:
+    access = await _notebook_access()
+    if not access:
         raise NotebookAccessError(
-            "No notebooks are allowlisted (or none of the configured "
-            "JOPLIN_ALLOWED_NOTEBOOKS entries matched a real notebook id or "
-            "name). Set JOPLIN_ALLOWED_NOTEBOOKS to a comma-separated list "
-            "of notebook ids and/or names, or '*' for all."
+            "No notebooks are configured for access. Add a `notebooks` list to "
+            "the config file with {\"id\": <id or name>, \"access\": \"read\"|"
+            "\"write\"} entries, or {\"id\": \"*\", \"access\": ...} for all."
         )
-    return allowed
+    return access
 
 
 @mcp.tool
 async def search_notes(query: str, limit: int = 20) -> str:
     """Search Joplin notes by keyword. Returns matching note titles and ids."""
-    allowed = await _require_allowlist()
+    access = await _require_access()
     notes = await get_client().search_notes(query, limit=limit)
-    in_scope = [n for n in notes if n["parent_id"] in allowed]
+    in_scope = [n for n in notes if access.can_read(n["parent_id"])]
     if not in_scope:
         if notes:
-            scope = os.environ.get("JOPLIN_ALLOWED_NOTEBOOKS", "")
             return (
                 f"Found {len(notes)} note(s) matching '{query}', but none are "
-                f"in allowed notebooks (JOPLIN_ALLOWED_NOTEBOOKS={scope!r})."
+                "in a notebook you have read access to."
             )
         return f"No notes found matching '{query}'."
     lines = [f"- {n['title']} (id: {n['id']})" for n in in_scope]
@@ -91,12 +142,12 @@ async def search_notes(query: str, limit: int = 20) -> str:
 @mcp.tool
 async def get_note(note_id: str) -> str:
     """Fetch the full content of a single Joplin note by its id."""
-    allowed = await _require_allowlist()
+    access = await _require_access()
     note = await get_client().get_note(note_id)
-    if note["parent_id"] not in allowed:
+    if not access.can_read(note["parent_id"]):
         raise NotebookAccessError(
-            f"Note '{note_id}' is in notebook '{note['parent_id']}', which is "
-            "not in JOPLIN_ALLOWED_NOTEBOOKS."
+            f"Note '{note_id}' is in notebook '{note['parent_id']}', which you "
+            "do not have read access to."
         )
     return (
         f"# {note['title']}\n"
@@ -108,10 +159,10 @@ async def get_note(note_id: str) -> str:
 @mcp.tool
 async def create_note(title: str, body: str, notebook_id: str) -> str:
     """Create a new note in the given notebook. Use list_notebooks to find a notebook_id."""
-    allowed = await _require_allowlist()
-    if notebook_id not in allowed:
+    access = await _require_access()
+    if not access.can_write(notebook_id):
         raise NotebookAccessError(
-            f"Notebook '{notebook_id}' is not in JOPLIN_ALLOWED_NOTEBOOKS."
+            f"Notebook '{notebook_id}' is not configured for write access."
         )
     note = await get_client().create_note(title, body, notebook_id)
     return f"Created note '{note['title']}' (id: {note['id']})."
@@ -120,12 +171,12 @@ async def create_note(title: str, body: str, notebook_id: str) -> str:
 @mcp.tool
 async def update_note(note_id: str, title: str | None = None, body: str | None = None) -> str:
     """Update an existing note's title and/or body. Only provided fields are changed."""
-    allowed = await _require_allowlist()
+    access = await _require_access()
     existing = await get_client().get_note(note_id)
-    if existing["parent_id"] not in allowed:
+    if not access.can_write(existing["parent_id"]):
         raise NotebookAccessError(
-            f"Note '{note_id}' is in notebook '{existing['parent_id']}', which is "
-            "not in JOPLIN_ALLOWED_NOTEBOOKS."
+            f"Note '{note_id}' is in notebook '{existing['parent_id']}', which "
+            "is not configured for write access."
         )
     note = await get_client().update_note(note_id, title=title, body=body)
     return f"Updated note '{note['title']}' (id: {note['id']})."

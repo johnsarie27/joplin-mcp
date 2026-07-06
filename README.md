@@ -15,17 +15,22 @@ Web Clipper REST API.
 
 1. In Joplin Desktop: **Tools > Options > Web Clipper**, enable the service,
    copy the auth token shown there.
-2. Set the token as an environment variable (don't hardcode it in configs
-   you might commit or share):
+2. Install [uv](https://docs.astral.sh/uv/) if you don't have it.
+3. Copy `config.example.json` to `config.json` at the repo root (already
+   gitignored, so it won't be committed) and fill in:
+   ```json
+   {
+     "token": "paste-your-token-here",
+     "host": "localhost",
+     "port": "41184",
+     "notebooks": [
+       {"id": "notebook-id-or-name", "access": "write"},
+       {"id": "another-notebook-id-or-name", "access": "read"}
+     ]
+   }
    ```
-   export JOPLIN_TOKEN="paste-your-token-here"
-   ```
-   Or drop it into the `.env` file at the repo root (already gitignored)
-   and pass `--env-file .env` to `uv run` instead — see below.
-3. Install [uv](https://docs.astral.sh/uv/) if you don't have it.
-4. Set `JOPLIN_ALLOWED_NOTEBOOKS` to a comma-separated list of notebook ids
-   and/or names (get these from `list_notebooks`) — see **Access control**
-   below.
+   `host`/`port` are optional and default to `localhost`/`41184`. See
+   **Access control** below for the `notebooks` list.
 
 ## Running it
 
@@ -36,23 +41,23 @@ on first run.
 uv run --directory /path/to/joplin-mcp joplin-mcp-server
 ```
 
-To load `JOPLIN_TOKEN` (and friends) from the `.env` file instead of
-exporting them in your shell:
+This looks for `config.json` in the working directory (which `--directory`
+sets to the repo). To keep the config file somewhere else, set
+`JOPLIN_CONFIG` to its path:
 
 ```bash
-uv run --env-file .env --directory /path/to/joplin-mcp joplin-mcp-server
+JOPLIN_CONFIG=/path/to/config.json uv run --directory /path/to/joplin-mcp joplin-mcp-server
 ```
 
 ## Wiring into an MCP client
 
-Both approaches below point `uv` at the `.env` file rather than duplicating
-`JOPLIN_TOKEN`/`JOPLIN_ALLOWED_NOTEBOOKS` into the client config — one
-source of truth for secrets.
+Both approaches below point at the repo directory, which is where
+`config.json` lives — one source of truth for secrets and access config.
 
 ### Claude Code
 
 ```bash
-claude mcp add joplin -s user -- uv run --env-file /path/to/joplin-mcp/.env --directory /path/to/joplin-mcp joplin-mcp-server
+claude mcp add joplin -s user -- uv run --directory /path/to/joplin-mcp joplin-mcp-server
 ```
 
 `-s user` registers it at user scope, so it's available in every Claude
@@ -69,7 +74,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "joplin": {
       "command": "uv",
-      "args": ["run", "--env-file", "/path/to/joplin-mcp/.env", "--directory", "/path/to/joplin-mcp", "joplin-mcp-server"]
+      "args": ["run", "--directory", "/path/to/joplin-mcp", "joplin-mcp-server"]
     }
   }
 }
@@ -95,13 +100,14 @@ uvx --from git+https://github.com/johnsarie27/joplin-mcp@<pinned-sha> joplin-mcp
 pinning `<pinned-sha>` to a specific commit per the SHA-pinning convention,
 so client configs aren't silently pulling `main` on every run. No local
 checkout needed at that point — just swap the `command`/`args` in whichever
-client config above to `uvx`/`--from git+...` instead of `uv`/`run --env-file
-... --directory ...`.
+client config above to `uvx`/`--from git+...` instead of `uv`/`run
+--directory ...`. Set `JOPLIN_CONFIG` to an absolute path in this case,
+since there's no repo checkout to hold a `config.json` next to.
 
 ## Testing standalone (recommended before wiring into a client)
 
 ```bash
-npx @modelcontextprotocol/inspector uv run --env-file .env --directory /path/to/joplin-mcp joplin-mcp-server
+npx @modelcontextprotocol/inspector uv run --directory /path/to/joplin-mcp joplin-mcp-server
 ```
 
 This opens a local web UI where you can call each tool manually and see
@@ -109,24 +115,32 @@ the raw request/response before trusting it to a model.
 
 ## Access control
 
-`search_notes`, `get_note`, `create_note`, and `update_note` are scoped to
-notebooks listed in `JOPLIN_ALLOWED_NOTEBOOKS` (comma-separated notebook
-ids and/or names). This is fail-closed: if the variable is unset, empty,
-or none of its entries match a real notebook, all four tools refuse to
+`search_notes`, `get_note`, `create_note`, and `update_note` are scoped by
+the `notebooks` list in `config.json`. Each entry is:
+
+```json
+{"id": "notebook-id-or-name", "access": "read"}
+```
+
+`access` is `"read"` (default if omitted) or `"write"` (implies read).
+`search_notes`/`get_note` require `read`; `create_note`/`update_note`
+require `write`. This is fail-closed: if `notebooks` is missing, empty, or
+none of its entries match a real notebook, all four tools refuse to
 operate. `list_notebooks` is unaffected since it only returns notebook
 metadata, not note content, and doubles as the way to find the ids/names
-to allowlist in the first place.
+to list in `config.json` in the first place.
 
 Name matching is case-insensitive (`Tech`, `tech`, and `TECH` are
 equivalent) and resolved against the live notebook list on each call, so
 a rename takes effect immediately. Since Joplin doesn't require notebook
 names to be unique (nested notebooks can share a title), a name that
-matches more than one notebook allows all of them — use the notebook id
-instead (from `list_notebooks`) if you need to scope to just one of
-several same-named notebooks.
+matches more than one notebook grants that access level to all of them —
+use the notebook id instead (from `list_notebooks`) if you need to scope
+to just one of several same-named notebooks.
 
-Set `JOPLIN_ALLOWED_NOTEBOOKS=*` to explicitly allow all notebooks. This
-is a deliberate opt-in, distinct from leaving the variable unset.
+Use `{"id": "*", "access": "read"}` or `{"id": "*", "access": "write"}` to
+grant that access level to all notebooks. This is a deliberate opt-in,
+distinct from leaving `notebooks` empty.
 
 Out-of-scope access raises a `NotebookAccessError` with a message naming
 the notebook, distinct from a `JoplinError` (an actual Joplin API failure).
@@ -135,8 +149,8 @@ the notebook, distinct from a `JoplinError` (an actual Joplin API failure).
 
 - Requires Joplin Desktop running with the Web Clipper service enabled
   (i.e. Joplin itself must be open — this doesn't run Joplin headlessly).
-- `JOPLIN_HOST` / `JOPLIN_PORT` env vars override the defaults
-  (`localhost` / `41184`) if needed.
+- `host` / `port` in `config.json` override the defaults (`localhost` /
+  `41184`) if needed.
 - Errors from the Joplin API surface as `JoplinError` with the raw
   status/body — check these first if a tool call fails.
 

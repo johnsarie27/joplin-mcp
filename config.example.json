@@ -1,0 +1,9 @@
+{
+  "token": "paste-your-web-clipper-token-here",
+  "host": "localhost",
+  "port": "41184",
+  "notebooks": [
+    {"id": "notebook-id-or-name", "access": "write"},
+    {"id": "another-notebook-id-or-name", "access": "read"}
+  ]
+}

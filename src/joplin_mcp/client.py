@@ -1,6 +1,5 @@
 """Thin async wrapper around Joplin's local REST API (Web Clipper service)."""
 
-import os
 from typing import Any
 
 import httpx
@@ -11,20 +10,13 @@ class JoplinError(Exception):
 
 
 class JoplinClient:
-    def __init__(
-        self,
-        token: str | None = None,
-        host: str | None = None,
-        port: str | None = None,
-    ) -> None:
-        self.token = token or os.environ.get("JOPLIN_TOKEN")
-        if not self.token:
+    def __init__(self, token: str, host: str = "localhost", port: str = "41184") -> None:
+        if not token:
             raise JoplinError(
-                "No Joplin API token found. Set the JOPLIN_TOKEN environment "
-                "variable (Tools > Options > Web Clipper in Joplin Desktop)."
+                "No Joplin API token configured. Set `token` in the config file "
+                "(Tools > Options > Web Clipper in Joplin Desktop for the value)."
             )
-        host = host or os.environ.get("JOPLIN_HOST", "localhost")
-        port = port or os.environ.get("JOPLIN_PORT", "41184")
+        self.token = token
         self.base_url = f"http://{host}:{port}"
 
     async def _request(
