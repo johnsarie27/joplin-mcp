@@ -88,21 +88,66 @@ Some Claude Desktop builds manage MCP servers through a Settings UI
 (Extensions/Connectors) instead of this file directly — check there first
 if the file on disk doesn't have an `mcpServers` key already.
 
-### Migrating to `uvx` later
+### Using `uvx` instead (no local checkout needed)
 
-Once this repo is stable and pushed, the local `uv run --directory ...`
-invocation above can be replaced with:
+`uv run --directory ...` (above) operates on a project already cloned to
+disk — it needs a working copy of this repo, its `pyproject.toml`, and its
+lockfile at that path. `uvx` (short for `uv tool run`) is different: it
+fetches the package straight from git into uv's own cache and runs it in
+an ephemeral environment, so the machine running the MCP client doesn't
+need a local clone at all — just a `config.json` and `JOPLIN_CONFIG`
+pointing at it.
 
 ```bash
-uvx --from git+https://github.com/johnsarie27/joplin-mcp@<pinned-sha> joplin-mcp-server
+uvx --from git+https://github.com/johnsarie27/joplin-mcp@<ref> joplin-mcp-server
 ```
 
-pinning `<pinned-sha>` to a specific commit per the SHA-pinning convention,
-so client configs aren't silently pulling `main` on every run. No local
-checkout needed at that point — just swap the `command`/`args` in whichever
-client config above to `uvx`/`--from git+...` instead of `uv`/`run
---directory ...`. Set `JOPLIN_CONFIG` to an absolute path in this case,
-since there's no repo checkout to hold a `config.json` next to.
+`<ref>` can be a branch (e.g. `main`) or a commit SHA. A branch ref is
+re-resolved to whatever the current tip commit is on every launch (a
+network round-trip, and a fresh dependency resolve/build whenever that tip
+changes) — convenient while iterating, but it means the running server can
+change without you touching either client config. Pinning `<ref>` to a
+specific commit SHA, per the SHA-pinning convention, freezes both the code
+and its resolved dependency versions until you deliberately bump the pin —
+prefer this once the repo's been stable through some real usage.
+
+Since there's no local checkout in this mode, set `JOPLIN_CONFIG` to an
+absolute path so `config.json` can still be found. Swap the `command`/`args`
+in whichever client config above to `uvx`/`--from git+...` instead of
+`uv`/`run --directory ...`, and add the `JOPLIN_CONFIG` env var:
+
+```bash
+claude mcp add joplin -s user -e JOPLIN_CONFIG=/path/to/config.json -- uvx --from git+https://github.com/johnsarie27/joplin-mcp@<ref> joplin-mcp-server
+```
+
+```json
+{
+  "mcpServers": {
+    "joplin": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/johnsarie27/joplin-mcp@<ref>", "joplin-mcp-server"],
+      "env": {
+        "JOPLIN_CONFIG": "/path/to/config.json"
+      }
+    }
+  }
+}
+```
+
+## Releasing
+
+Tag a commit on `main` to cut a release:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Pushing a tag matching `v<major>.<minor>.<patch>` triggers
+`.github/workflows/release.yml`, which creates a GitHub Release with
+auto-generated notes (a "What's Changed" list of merged PRs since the
+previous tag). Use the resulting tag as `<ref>` when pinning `uvx --from
+git+...@<ref>` per **Using `uvx` instead** above.
 
 ## Testing standalone (recommended before wiring into a client)
 
