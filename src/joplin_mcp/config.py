@@ -30,4 +30,23 @@ def load_config() -> dict:
         raise ConfigError(f"Config file '{path}' is not valid JSON: {e}") from e
     if not isinstance(data, dict):
         raise ConfigError(f"Config file '{path}' must contain a JSON object.")
+    _validate_notebooks(data.get("notebooks", []))
     return data
+
+
+def _validate_notebooks(entries: object) -> None:
+    if not isinstance(entries, list):
+        raise ConfigError("Config `notebooks` must be a list.")
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ConfigError(
+                f"Each `notebooks` entry must be a JSON object with \"id\" and "
+                f"\"access\" keys, got {entry!r}."
+            )
+        access = entry.get("access", "read")
+        if access not in VALID_ACCESS_LEVELS:
+            raise ConfigError(
+                f"Invalid access level {access!r} for notebook "
+                f"{entry.get('id')!r} in config (must be one of "
+                f"{sorted(VALID_ACCESS_LEVELS)})."
+            )

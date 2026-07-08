@@ -5,7 +5,7 @@ from functools import lru_cache
 from fastmcp import FastMCP
 
 from joplin_mcp.client import JoplinClient
-from joplin_mcp.config import VALID_ACCESS_LEVELS, load_config
+from joplin_mcp.config import load_config
 
 mcp = FastMCP("joplin")
 
@@ -18,13 +18,18 @@ class NotebookAccessError(Exception):
 def get_client() -> JoplinClient:
     # Cached so we reuse one client/token for the life of the process,
     # but constructed lazily so a missing/invalid config fails at first
-    # tool call (with a clear error) rather than at import time.
+    # tool call (with a clear error) rather than at import time. Token/host/
+    # port are fixed at that first call - a rotated token or changed host
+    # needs a process restart to take effect (unlike the notebooks list
+    # below, which is intentionally re-read live on every tool call so
+    # renames/access edits take effect immediately).
     config = load_config()
-    return JoplinClient(
-        token=config.get("token", ""),
-        host=config.get("host", "localhost"),
-        port=str(config.get("port", "41184")),
-    )
+    kwargs: dict[str, str] = {"token": config.get("token", "")}
+    if config.get("host"):
+        kwargs["host"] = config["host"]
+    if config.get("port"):
+        kwargs["port"] = str(config["port"])
+    return JoplinClient(**kwargs)
 
 
 class NotebookAccess:
@@ -49,7 +54,9 @@ class NotebookAccess:
         return self._write_all or notebook_id in self._write_ids
 
     def __bool__(self) -> bool:
-        return self._read_all or self._write_all or bool(self._read_ids) or bool(self._write_ids)
+        # `_read_all` already folds in `write_all` (write implies read), so
+        # `_write_all` can never be true here while `_read_all` is false.
+        return self._read_all or bool(self._read_ids) or bool(self._write_ids)
 
 
 async def _notebook_access() -> NotebookAccess:
@@ -69,13 +76,9 @@ async def _notebook_access() -> NotebookAccess:
     raw_read: set[str] = set()
     raw_write: set[str] = set()
     for entry in entries:
+        # Shape and access-level validity are already checked by load_config().
         raw_id = str(entry.get("id", "")).strip()
         access = entry.get("access", "read")
-        if access not in VALID_ACCESS_LEVELS:
-            raise NotebookAccessError(
-                f"Invalid access level {access!r} for notebook {raw_id!r} in "
-                f"config (must be one of {sorted(VALID_ACCESS_LEVELS)})."
-            )
         if not raw_id:
             continue
         if raw_id == "*":
