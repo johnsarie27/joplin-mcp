@@ -134,6 +134,21 @@ claude mcp add joplin -s user -e JOPLIN_CONFIG=/path/to/config.json -- uvx --fro
 }
 ```
 
+## Releasing
+
+Tag a commit on `main` to cut a release:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Pushing a tag matching `v<major>.<minor>.<patch>` triggers
+`.github/workflows/release.yml`, which creates a GitHub Release with
+auto-generated notes (a "What's Changed" list of merged PRs since the
+previous tag). Use the resulting tag as `<ref>` when pinning `uvx --from
+git+...@<ref>` per **Using `uvx` instead** above.
+
 ## Testing standalone (recommended before wiring into a client)
 
 ```bash
