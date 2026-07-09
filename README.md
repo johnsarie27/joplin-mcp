@@ -22,11 +22,13 @@ Web Clipper REST API.
 
 ## Tools
 
-- `search_notes(query, limit=20)` — full-text search
-- `get_note(note_id)` — fetch a note's full content
-- `create_note(title, body, notebook_id)` — create a new note
-- `update_note(note_id, title=None, body=None)` — edit an existing note
-- `list_notebooks()` — list notebooks, to get a `notebook_id` for `create_note`
+| Tool | Description |
+| --- | --- |
+| `search_notes(query, limit=20)` | Full-text search |
+| `get_note(note_id)` | Fetch a note's full content |
+| `create_note(title, body, notebook_id)` | Create a new note |
+| `update_note(note_id, title=None, body=None)` | Edit an existing note |
+| `list_notebooks()` | List notebooks, to get a `notebook_id` for `create_note` |
 
 ## Setup
 

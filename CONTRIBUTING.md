@@ -1,5 +1,7 @@
 # Contributing
 
+See [README.md](README.md#contents) for usage docs.
+
 ## Development setup
 
 1. Install [uv](https://docs.astral.sh/uv/) if you don't have it.
