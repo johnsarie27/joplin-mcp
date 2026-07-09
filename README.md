@@ -1,15 +1,34 @@
 # joplin-mcp
 
+[![Release](https://img.shields.io/github/v/release/johnsarie27/joplin-mcp?sort=semver)](https://github.com/johnsarie27/joplin-mcp/releases)
+[![CodeQL](https://github.com/johnsarie27/joplin-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/johnsarie27/joplin-mcp/actions/workflows/codeql.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A minimal MCP server for Joplin, built with FastMCP. Talks to Joplin's local
 Web Clipper REST API.
 
+## Contents
+
+- [Tools](#tools)
+- [Setup](#setup)
+- [Running it](#running-it)
+- [Wiring into an MCP client](#wiring-into-an-mcp-client)
+- [Access control](#access-control)
+- [Notes on this build](#notes-on-this-build)
+- [References](#references)
+- [Related projects](#related-projects)
+- [Contributing](#contributing)
+
 ## Tools
 
-- `search_notes(query, limit=20)` — full-text search
-- `get_note(note_id)` — fetch a note's full content
-- `create_note(title, body, notebook_id)` — create a new note
-- `update_note(note_id, title=None, body=None)` — edit an existing note
-- `list_notebooks()` — list notebooks, to get a `notebook_id` for `create_note`
+| Tool | Description |
+| --- | --- |
+| `search_notes(query, limit=20)` | Full-text search |
+| `get_note(note_id)` | Fetch a note's full content |
+| `create_note(title, body, notebook_id)` | Create a new note |
+| `update_note(note_id, title=None, body=None)` | Edit an existing note |
+| `list_notebooks()` | List notebooks, to get a `notebook_id` for `create_note` |
 
 ## Setup
 
@@ -134,29 +153,13 @@ claude mcp add joplin -s user -e JOPLIN_CONFIG=/path/to/config.json -- uvx --fro
 }
 ```
 
-## Releasing
+Release tags (`v<major>.<minor>.<patch>`) are also valid refs — see
+**Releasing** in [CONTRIBUTING.md](CONTRIBUTING.md) for how they're cut. Use
+one as `<ref>` when pinning `uvx --from git+...@<ref>` above.
 
-Tag a commit on `main` to cut a release:
-
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-Pushing a tag matching `v<major>.<minor>.<patch>` triggers
-`.github/workflows/release.yml`, which creates a GitHub Release with
-auto-generated notes (a "What's Changed" list of merged PRs since the
-previous tag). Use the resulting tag as `<ref>` when pinning `uvx --from
-git+...@<ref>` per **Using `uvx` instead** above.
-
-## Testing standalone (recommended before wiring into a client)
-
-```bash
-npx @modelcontextprotocol/inspector uv run --directory /path/to/joplin-mcp joplin-mcp-server
-```
-
-This opens a local web UI where you can call each tool manually and see
-the raw request/response before trusting it to a model.
+Tip: you can run the server standalone and call each tool manually before
+wiring it into a client — see **Testing changes** in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Access control
 
@@ -207,3 +210,8 @@ the notebook, distinct from a `JoplinError` (an actual Joplin API failure).
 
 - [alondmnt/joplin-mcp](https://github.com/alondmnt/joplin-mcp)
 - [dweigend/joplin-mcp-server](https://github.com/dweigend/joplin-mcp-server)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and
+the release process.
