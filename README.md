@@ -1,7 +1,25 @@
 # joplin-mcp
 
+[![Release](https://img.shields.io/github/v/release/johnsarie27/joplin-mcp?sort=semver)](https://github.com/johnsarie27/joplin-mcp/releases)
+[![CodeQL](https://github.com/johnsarie27/joplin-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/johnsarie27/joplin-mcp/actions/workflows/codeql.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A minimal MCP server for Joplin, built with FastMCP. Talks to Joplin's local
 Web Clipper REST API.
+
+## Contents
+
+- [Tools](#tools)
+- [Setup](#setup)
+- [Running it](#running-it)
+- [Wiring into an MCP client](#wiring-into-an-mcp-client)
+- [Testing standalone](#testing-standalone-recommended-before-wiring-into-a-client)
+- [Access control](#access-control)
+- [Notes on this build](#notes-on-this-build)
+- [References](#references)
+- [Related projects](#related-projects)
+- [Contributing](#contributing)
 
 ## Tools
 
@@ -134,20 +152,9 @@ claude mcp add joplin -s user -e JOPLIN_CONFIG=/path/to/config.json -- uvx --fro
 }
 ```
 
-## Releasing
-
-Tag a commit on `main` to cut a release:
-
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-Pushing a tag matching `v<major>.<minor>.<patch>` triggers
-`.github/workflows/release.yml`, which creates a GitHub Release with
-auto-generated notes (a "What's Changed" list of merged PRs since the
-previous tag). Use the resulting tag as `<ref>` when pinning `uvx --from
-git+...@<ref>` per **Using `uvx` instead** above.
+Release tags (`v<major>.<minor>.<patch>`) are also valid refs — see
+**Releasing** in [CONTRIBUTING.md](CONTRIBUTING.md) for how they're cut. Use
+one as `<ref>` when pinning `uvx --from git+...@<ref>` above.
 
 ## Testing standalone (recommended before wiring into a client)
 
@@ -207,3 +214,8 @@ the notebook, distinct from a `JoplinError` (an actual Joplin API failure).
 
 - [alondmnt/joplin-mcp](https://github.com/alondmnt/joplin-mcp)
 - [dweigend/joplin-mcp-server](https://github.com/dweigend/joplin-mcp-server)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and
+the release process.
