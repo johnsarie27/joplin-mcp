@@ -14,7 +14,6 @@ Web Clipper REST API.
 - [Setup](#setup)
 - [Running it](#running-it)
 - [Wiring into an MCP client](#wiring-into-an-mcp-client)
-- [Testing standalone](#testing-standalone-recommended-before-wiring-into-a-client)
 - [Access control](#access-control)
 - [Notes on this build](#notes-on-this-build)
 - [References](#references)
@@ -156,14 +155,9 @@ Release tags (`v<major>.<minor>.<patch>`) are also valid refs — see
 **Releasing** in [CONTRIBUTING.md](CONTRIBUTING.md) for how they're cut. Use
 one as `<ref>` when pinning `uvx --from git+...@<ref>` above.
 
-## Testing standalone (recommended before wiring into a client)
-
-```bash
-npx @modelcontextprotocol/inspector uv run --directory /path/to/joplin-mcp joplin-mcp-server
-```
-
-This opens a local web UI where you can call each tool manually and see
-the raw request/response before trusting it to a model.
+Tip: you can run the server standalone and call each tool manually before
+wiring it into a client — see **Testing changes** in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Access control
 
