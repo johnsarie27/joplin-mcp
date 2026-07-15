@@ -186,6 +186,35 @@ async def update_note(note_id: str, title: str | None = None, body: str | None =
 
 
 @mcp.tool
+async def delete_note(note_id: str) -> str:
+    """Delete a note by its id. Moves it to Joplin's trash rather than a permanent delete."""
+    access = await _require_access()
+    existing = await get_client().get_note(note_id)
+    if not access.can_write(existing["parent_id"]):
+        raise NotebookAccessError(
+            f"Note '{note_id}' is in notebook '{existing['parent_id']}', which "
+            "is not configured for write access."
+        )
+    await get_client().delete_note(note_id)
+    return f"Deleted note '{existing['title']}' (id: {note_id})."
+
+
+@mcp.tool
+async def list_notes_in_notebook(notebook_id: str, limit: int = 20) -> str:
+    """List notes in a notebook without a search query. Use list_notebooks to find a notebook_id."""
+    access = await _require_access()
+    if not access.can_read(notebook_id):
+        raise NotebookAccessError(
+            f"Notebook '{notebook_id}' is not configured for read access."
+        )
+    notes = await get_client().list_notes_in_notebook(notebook_id, limit=limit)
+    if not notes:
+        return f"No notes found in notebook '{notebook_id}'."
+    lines = [f"- {n['title']} (id: {n['id']})" for n in notes]
+    return f"Found {len(notes)} note(s) in notebook '{notebook_id}':\n" + "\n".join(lines)
+
+
+@mcp.tool
 async def list_notebooks() -> str:
     """List all Joplin notebooks (folders) with their ids, for use with create_note."""
     notebooks = await get_client().list_notebooks()

@@ -30,6 +30,8 @@ class JoplinClient:
             )
         if resp.status_code >= 400:
             raise JoplinError(f"Joplin API error {resp.status_code}: {resp.text}")
+        if not resp.content:
+            return None
         return resp.json()
 
     async def search_notes(self, query: str, limit: int = 20) -> list[dict]:
@@ -74,5 +76,18 @@ class JoplinClient:
     async def list_notebooks(self) -> list[dict]:
         data = await self._request(
             "GET", "/folders", params={"fields": "id,title,parent_id"}
+        )
+        return data.get("items", [])
+
+    async def delete_note(self, note_id: str) -> None:
+        # Joplin moves the note to its trash rather than deleting it outright
+        # unless `permanent=1` is passed; we deliberately don't expose that.
+        await self._request("DELETE", f"/notes/{note_id}")
+
+    async def list_notes_in_notebook(self, notebook_id: str, limit: int = 20) -> list[dict]:
+        data = await self._request(
+            "GET",
+            f"/folders/{notebook_id}/notes",
+            params={"fields": "id,title,parent_id,updated_time", "limit": limit},
         )
         return data.get("items", [])
