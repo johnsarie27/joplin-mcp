@@ -125,21 +125,31 @@ async def _require_access() -> NotebookAccess:
     return access
 
 
+def _more_results_note(has_more: bool, limit: int) -> str:
+    # `has_more` reflects Joplin's raw, unfiltered page - it says more results
+    # exist, not that the caller can read them, so the message only claims
+    # the former.
+    if not has_more:
+        return ""
+    return f"\n\n(More results exist beyond this {limit}-item page; raise `limit` to see them.)"
+
+
 @mcp.tool
 async def search_notes(query: str, limit: int = 20) -> str:
     """Search Joplin notes by keyword. Returns matching note titles and ids."""
     access = await _require_access()
-    notes = await get_client().search_notes(query, limit=limit)
+    notes, has_more = await get_client().search_notes(query, limit=limit)
     in_scope = [n for n in notes if access.can_read(n["parent_id"])]
+    more = _more_results_note(has_more, limit)
     if not in_scope:
         if notes:
             return (
                 f"Found {len(notes)} note(s) matching '{query}', but none are "
-                "in a notebook you have read access to."
+                f"in a notebook you have read access to.{more}"
             )
-        return f"No notes found matching '{query}'."
+        return f"No notes found matching '{query}'.{more}"
     lines = [f"- {n['title']} (id: {n['id']})" for n in in_scope]
-    return f"Found {len(in_scope)} note(s) matching '{query}':\n" + "\n".join(lines)
+    return f"Found {len(in_scope)} note(s) matching '{query}':\n" + "\n".join(lines) + more
 
 
 @mcp.tool
@@ -223,11 +233,12 @@ async def list_notes_in_notebook(notebook_id: str, limit: int = 20) -> str:
         raise NotebookAccessError(
             f"Notebook '{notebook_id}' is not configured for read access."
         )
-    notes = await get_client().list_notes_in_notebook(notebook_id, limit=limit)
+    notes, has_more = await get_client().list_notes_in_notebook(notebook_id, limit=limit)
+    more = _more_results_note(has_more, limit)
     if not notes:
-        return f"No notes found in notebook '{notebook_id}'."
+        return f"No notes found in notebook '{notebook_id}'.{more}"
     lines = [f"- {n['title']} (id: {n['id']})" for n in notes]
-    return f"Found {len(notes)} note(s) in notebook '{notebook_id}':\n" + "\n".join(lines)
+    return f"Found {len(notes)} note(s) in notebook '{notebook_id}':\n" + "\n".join(lines) + more
 
 
 @mcp.tool
@@ -252,17 +263,18 @@ async def list_tags() -> str:
 async def get_notes_by_tag(tag_id: str, limit: int = 20) -> str:
     """List notes with a given tag. Use list_tags to find a tag_id."""
     access = await _require_access()
-    notes = await get_client().get_notes_by_tag(tag_id, limit=limit)
+    notes, has_more = await get_client().get_notes_by_tag(tag_id, limit=limit)
     in_scope = [n for n in notes if access.can_read(n["parent_id"])]
+    more = _more_results_note(has_more, limit)
     if not in_scope:
         if notes:
             return (
                 f"Found {len(notes)} note(s) with this tag, but none are in "
-                "a notebook you have read access to."
+                f"a notebook you have read access to.{more}"
             )
-        return f"No notes found with tag '{tag_id}'."
+        return f"No notes found with tag '{tag_id}'.{more}"
     lines = [f"- {n['title']} (id: {n['id']})" for n in in_scope]
-    return f"Found {len(in_scope)} note(s) with tag '{tag_id}':\n" + "\n".join(lines)
+    return f"Found {len(in_scope)} note(s) with tag '{tag_id}':\n" + "\n".join(lines) + more
 
 
 def main() -> None:
