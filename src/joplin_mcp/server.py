@@ -4,7 +4,7 @@ from functools import lru_cache
 
 from fastmcp import FastMCP
 
-from joplin_mcp.client import JoplinClient
+from joplin_mcp.client import JoplinClient, JoplinError
 from joplin_mcp.config import load_config
 
 mcp = FastMCP("joplin")
@@ -152,11 +152,10 @@ async def get_note(note_id: str) -> str:
             f"Note '{note_id}' is in notebook '{note['parent_id']}', which you "
             "do not have read access to."
         )
-    return (
-        f"# {note['title']}\n"
-        f"(id: {note['id']}, notebook: {note['parent_id']})\n\n"
-        f"{note['body']}"
-    )
+    header = f"# {note['title']}\n(id: {note['id']}, notebook: {note['parent_id']})\n"
+    if note.get("is_todo"):
+        header += f"To-do: {'done' if note.get('todo_completed') else 'not done'}\n"
+    return f"{header}\n{note['body']}"
 
 
 @mcp.tool
@@ -200,6 +199,23 @@ async def delete_note(note_id: str) -> str:
 
 
 @mcp.tool
+async def complete_todo(note_id: str, completed: bool = True) -> str:
+    """Mark a to-do note complete or incomplete. Fails if the note isn't a to-do."""
+    access = await _require_access()
+    existing = await get_client().get_note(note_id)
+    if not access.can_write(existing["parent_id"]):
+        raise NotebookAccessError(
+            f"Note '{note_id}' is in notebook '{existing['parent_id']}', which "
+            "is not configured for write access."
+        )
+    if not existing.get("is_todo"):
+        raise JoplinError(f"Note '{note_id}' is not a to-do (is_todo=0).")
+    note = await get_client().complete_todo(note_id, completed=completed)
+    state = "complete" if completed else "incomplete"
+    return f"Marked '{note['title']}' (id: {note_id}) as {state}."
+
+
+@mcp.tool
 async def list_notes_in_notebook(notebook_id: str, limit: int = 20) -> str:
     """List notes in a notebook without a search query. Use list_notebooks to find a notebook_id."""
     access = await _require_access()
@@ -220,6 +236,33 @@ async def list_notebooks() -> str:
     notebooks = await get_client().list_notebooks()
     lines = [f"- {n['title']} (id: {n['id']})" for n in notebooks]
     return f"{len(notebooks)} notebook(s):\n" + "\n".join(lines)
+
+
+@mcp.tool
+async def list_tags() -> str:
+    """List all Joplin tags with their ids, for use with get_notes_by_tag."""
+    tags = await get_client().list_tags()
+    if not tags:
+        return "No tags found."
+    lines = [f"- {t['title']} (id: {t['id']})" for t in tags]
+    return f"{len(tags)} tag(s):\n" + "\n".join(lines)
+
+
+@mcp.tool
+async def get_notes_by_tag(tag_id: str, limit: int = 20) -> str:
+    """List notes with a given tag. Use list_tags to find a tag_id."""
+    access = await _require_access()
+    notes = await get_client().get_notes_by_tag(tag_id, limit=limit)
+    in_scope = [n for n in notes if access.can_read(n["parent_id"])]
+    if not in_scope:
+        if notes:
+            return (
+                f"Found {len(notes)} note(s) with this tag, but none are in "
+                "a notebook you have read access to."
+            )
+        return f"No notes found with tag '{tag_id}'."
+    lines = [f"- {n['title']} (id: {n['id']})" for n in in_scope]
+    return f"Found {len(in_scope)} note(s) with tag '{tag_id}':\n" + "\n".join(lines)
 
 
 def main() -> None:
