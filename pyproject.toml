@@ -1,6 +1,6 @@
 [project]
 name = "joplin-mcp"
-version = "0.3.0"
+version = "0.3.1"
 description = "MCP server for Joplin note-taking app"
 requires-python = ">=3.10"
 dependencies = [
