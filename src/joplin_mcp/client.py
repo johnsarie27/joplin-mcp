@@ -1,5 +1,6 @@
 """Thin async wrapper around Joplin's local REST API (Web Clipper service)."""
 
+import time
 from typing import Any
 
 import httpx
@@ -51,7 +52,10 @@ class JoplinClient:
         return await self._request(
             "GET",
             f"/notes/{note_id}",
-            params={"fields": "id,title,body,parent_id,created_time,updated_time"},
+            params={
+                "fields": "id,title,body,parent_id,created_time,updated_time,"
+                "is_todo,todo_completed"
+            },
         )
 
     async def create_note(self, title: str, body: str, notebook_id: str) -> dict:
@@ -91,3 +95,21 @@ class JoplinClient:
             params={"fields": "id,title,parent_id,updated_time", "limit": limit},
         )
         return data.get("items", [])
+
+    async def list_tags(self) -> list[dict]:
+        data = await self._request("GET", "/tags", params={"fields": "id,title"})
+        return data.get("items", [])
+
+    async def get_notes_by_tag(self, tag_id: str, limit: int = 20) -> list[dict]:
+        data = await self._request(
+            "GET",
+            f"/tags/{tag_id}/notes",
+            params={"fields": "id,title,parent_id,updated_time", "limit": limit},
+        )
+        return data.get("items", [])
+
+    async def complete_todo(self, note_id: str, completed: bool) -> dict:
+        # Joplin represents todo_completed as the completion timestamp (ms),
+        # not a bool; 0 means not completed.
+        payload = {"todo_completed": int(time.time() * 1000) if completed else 0}
+        return await self._request("PUT", f"/notes/{note_id}", json=payload)

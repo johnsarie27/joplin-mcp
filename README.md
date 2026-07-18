@@ -29,8 +29,11 @@ Web Clipper REST API.
 | `create_note(title, body, notebook_id)` | Create a new note |
 | `update_note(note_id, title=None, body=None)` | Edit an existing note |
 | `delete_note(note_id)` | Delete a note (moves it to Joplin's trash) |
+| `complete_todo(note_id, completed=True)` | Mark a to-do note complete or incomplete |
 | `list_notes_in_notebook(notebook_id, limit=20)` | Browse a notebook's notes without a search query |
 | `list_notebooks()` | List notebooks, to get a `notebook_id` for `create_note` |
+| `list_tags()` | List tags, to get a `tag_id` for `get_notes_by_tag` |
+| `get_notes_by_tag(tag_id, limit=20)` | List notes with a given tag |
 
 ## Setup
 
@@ -165,22 +168,22 @@ wiring it into a client — see **Testing changes** in
 
 ## Access control
 
-`search_notes`, `get_note`, `create_note`, `update_note`, `delete_note`, and
-`list_notes_in_notebook` are scoped by the `notebooks` list in
-`config.json`. Each entry is:
+`search_notes`, `get_note`, `create_note`, `update_note`, `delete_note`,
+`complete_todo`, `list_notes_in_notebook`, and `get_notes_by_tag` are scoped
+by the `notebooks` list in `config.json`. Each entry is:
 
 ```json
 {"id": "notebook-id-or-name", "access": "read"}
 ```
 
 `access` is `"read"` (default if omitted) or `"write"` (implies read).
-`search_notes`/`get_note`/`list_notes_in_notebook` require `read`;
-`create_note`/`update_note`/`delete_note` require `write`. This is
-fail-closed: if `notebooks` is missing, empty, or none of its entries match
-a real notebook, all six tools refuse to operate. `list_notebooks` is
-unaffected since it only returns notebook metadata, not note content, and
-doubles as the way to find the ids/names to list in `config.json` in the
-first place.
+`search_notes`/`get_note`/`list_notes_in_notebook`/`get_notes_by_tag`
+require `read`; `create_note`/`update_note`/`delete_note`/`complete_todo`
+require `write`. This is fail-closed: if `notebooks` is missing, empty, or
+none of its entries match a real notebook, all eight tools refuse to
+operate. `list_notebooks` and `list_tags` are unaffected since they only
+return notebook/tag metadata, not note content, and double as the way to
+find the ids/names to pass to the scoped tools above.
 
 Name matching is case-insensitive (`Tech`, `tech`, and `TECH` are
 equivalent) and resolved against the live notebook list on each call, so
