@@ -28,6 +28,8 @@ Web Clipper REST API.
 | `get_note(note_id)` | Fetch a note's full content |
 | `create_note(title, body, notebook_id)` | Create a new note |
 | `update_note(note_id, title=None, body=None)` | Edit an existing note |
+| `delete_note(note_id)` | Delete a note (moves it to Joplin's trash) |
+| `list_notes_in_notebook(notebook_id, limit=20)` | Browse a notebook's notes without a search query |
 | `list_notebooks()` | List notebooks, to get a `notebook_id` for `create_note` |
 
 ## Setup
@@ -163,20 +165,22 @@ wiring it into a client — see **Testing changes** in
 
 ## Access control
 
-`search_notes`, `get_note`, `create_note`, and `update_note` are scoped by
-the `notebooks` list in `config.json`. Each entry is:
+`search_notes`, `get_note`, `create_note`, `update_note`, `delete_note`, and
+`list_notes_in_notebook` are scoped by the `notebooks` list in
+`config.json`. Each entry is:
 
 ```json
 {"id": "notebook-id-or-name", "access": "read"}
 ```
 
 `access` is `"read"` (default if omitted) or `"write"` (implies read).
-`search_notes`/`get_note` require `read`; `create_note`/`update_note`
-require `write`. This is fail-closed: if `notebooks` is missing, empty, or
-none of its entries match a real notebook, all four tools refuse to
-operate. `list_notebooks` is unaffected since it only returns notebook
-metadata, not note content, and doubles as the way to find the ids/names
-to list in `config.json` in the first place.
+`search_notes`/`get_note`/`list_notes_in_notebook` require `read`;
+`create_note`/`update_note`/`delete_note` require `write`. This is
+fail-closed: if `notebooks` is missing, empty, or none of its entries match
+a real notebook, all six tools refuse to operate. `list_notebooks` is
+unaffected since it only returns notebook metadata, not note content, and
+doubles as the way to find the ids/names to list in `config.json` in the
+first place.
 
 Name matching is case-insensitive (`Tech`, `tech`, and `TECH` are
 equivalent) and resolved against the live notebook list on each call, so
