@@ -35,7 +35,7 @@ class JoplinClient:
             return None
         return resp.json()
 
-    async def search_notes(self, query: str, limit: int = 20) -> list[dict]:
+    async def search_notes(self, query: str, limit: int = 20) -> tuple[list[dict], bool]:
         data = await self._request(
             "GET",
             "/search",
@@ -46,7 +46,7 @@ class JoplinClient:
                 "limit": limit,
             },
         )
-        return data.get("items", [])
+        return data.get("items", []), data.get("has_more", False)
 
     async def get_note(self, note_id: str) -> dict:
         return await self._request(
@@ -88,25 +88,27 @@ class JoplinClient:
         # unless `permanent=1` is passed; we deliberately don't expose that.
         await self._request("DELETE", f"/notes/{note_id}")
 
-    async def list_notes_in_notebook(self, notebook_id: str, limit: int = 20) -> list[dict]:
+    async def list_notes_in_notebook(
+        self, notebook_id: str, limit: int = 20
+    ) -> tuple[list[dict], bool]:
         data = await self._request(
             "GET",
             f"/folders/{notebook_id}/notes",
             params={"fields": "id,title,parent_id,updated_time", "limit": limit},
         )
-        return data.get("items", [])
+        return data.get("items", []), data.get("has_more", False)
 
     async def list_tags(self) -> list[dict]:
         data = await self._request("GET", "/tags", params={"fields": "id,title"})
         return data.get("items", [])
 
-    async def get_notes_by_tag(self, tag_id: str, limit: int = 20) -> list[dict]:
+    async def get_notes_by_tag(self, tag_id: str, limit: int = 20) -> tuple[list[dict], bool]:
         data = await self._request(
             "GET",
             f"/tags/{tag_id}/notes",
             params={"fields": "id,title,parent_id,updated_time", "limit": limit},
         )
-        return data.get("items", [])
+        return data.get("items", []), data.get("has_more", False)
 
     async def complete_todo(self, note_id: str, completed: bool) -> dict:
         # Joplin represents todo_completed as the completion timestamp (ms),
