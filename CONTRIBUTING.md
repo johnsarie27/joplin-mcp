@@ -49,12 +49,16 @@ change touching `client.py` or `config.py`.
 
 ## Releasing
 
-Maintainers cut a release by tagging a commit on `main`:
+Maintainers cut a release in two steps:
 
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
+1. Bump `version` in `pyproject.toml` to the new `<major>.<minor>.<patch>`,
+   run `uv lock` to sync `uv.lock`, and commit/push to `main`.
+2. Tag that commit and push the tag:
+
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
 
 Pushing a tag matching `v<major>.<minor>.<patch>` triggers
 `.github/workflows/release.yml`, which creates a GitHub Release with
