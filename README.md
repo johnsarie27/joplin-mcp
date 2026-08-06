@@ -32,6 +32,7 @@ Web Clipper REST API.
 | `complete_todo(note_id, completed=True)` | Mark a to-do note complete or incomplete |
 | `list_notes_in_notebook(notebook_id, limit=20)` | Browse a notebook's notes without a search query |
 | `list_notebooks()` | List notebooks, to get a `notebook_id` for `create_note` |
+| `create_notebook(title, parent_id=None)` | Create a notebook, at the root or nested inside another |
 | `list_tags()` | List tags, to get a `tag_id` for `get_notes_by_tag` |
 | `get_notes_by_tag(tag_id, limit=20)` | List notes with a given tag |
 
@@ -169,8 +170,9 @@ wiring it into a client — see **Testing changes** in
 ## Access control
 
 `search_notes`, `get_note`, `create_note`, `update_note`, `delete_note`,
-`complete_todo`, `list_notes_in_notebook`, and `get_notes_by_tag` are scoped
-by the `notebooks` list in `config.json`. Each entry is:
+`complete_todo`, `list_notes_in_notebook`, `get_notes_by_tag`, and
+`create_notebook` are scoped by the `notebooks` list in `config.json`. Each
+entry is:
 
 ```json
 {"id": "notebook-id-or-name", "access": "read"}
@@ -179,11 +181,16 @@ by the `notebooks` list in `config.json`. Each entry is:
 `access` is `"read"` (default if omitted) or `"write"` (implies read).
 `search_notes`/`get_note`/`list_notes_in_notebook`/`get_notes_by_tag`
 require `read`; `create_note`/`update_note`/`delete_note`/`complete_todo`
-require `write`. This is fail-closed: if `notebooks` is missing, empty, or
-none of its entries match a real notebook, all eight tools refuse to
-operate. `list_notebooks` and `list_tags` are unaffected since they only
-return notebook/tag metadata, not note content, and double as the way to
-find the ids/names to pass to the scoped tools above.
+require `write` on the relevant notebook. `create_notebook` follows the same
+rule when nesting inside an existing notebook (`parent_id` set) — it
+requires `write` on that parent, same as `create_note`. Creating a notebook
+at the root (`parent_id` omitted) is different: it isn't scoped to any
+existing notebook id, so it's governed by the `$root` sentinel instead —
+see below. This is fail-closed: if `notebooks` is missing, empty, or none
+of its entries grant applicable access, these tools refuse to operate.
+`list_notebooks` and `list_tags` are unaffected since they only return
+notebook/tag metadata, not note content, and double as the way to find the
+ids/names to pass to the scoped tools above.
 
 Name matching is case-insensitive (`Tech`, `tech`, and `TECH` are
 equivalent) and resolved against the live notebook list on each call, so
@@ -196,6 +203,34 @@ to just one of several same-named notebooks.
 Use `{"id": "*", "access": "read"}` or `{"id": "*", "access": "write"}` to
 grant that access level to all notebooks. This is a deliberate opt-in,
 distinct from leaving `notebooks` empty.
+
+Use the reserved id `"$root"` to grant permission to create notebooks at the
+root of the notebook tree — i.e. `create_notebook` calls that omit
+`parent_id`:
+
+```json
+{"id": "$root", "access": "write"}
+```
+
+This is a separate, narrower opt-in than blanket write access: it lets a
+config that only grants write on specific notebooks (e.g. `Tech`) also
+create new top-level notebooks, without granting write access to every
+existing notebook. `{"id": "*", "access": "write"}` already implies it, so
+you only need `$root` if you want root-level creation without full write
+access to everything else. `$root` only has meaning with `access: "write"`;
+an entry for it with `access: "read"` (or omitted) is a no-op, since there's
+nothing to read at the root. It also never grants read or write access to
+any real notebook — it's checked before name/id resolution runs, so it
+can't collide with an actual notebook, even one literally titled `$root`.
+
+Two edge cases worth knowing about `$root`: matching is exact and
+case-sensitive (unlike the case-insensitive name matching above), so a typo
+like `"$Root"` won't be recognized as the sentinel — it silently falls
+through to normal name/id resolution and matches nothing, rather than
+raising an error. And because `$root` is intercepted before name/id
+resolution runs, a real notebook titled `$root` can no longer be granted
+access by name in the `notebooks` list — use its id instead (from
+`list_notebooks`), same as with any other name collision.
 
 Out-of-scope access raises a `NotebookAccessError` with a message naming
 the notebook, distinct from a `JoplinError` (an actual Joplin API failure).

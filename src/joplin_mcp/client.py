@@ -83,6 +83,12 @@ class JoplinClient:
         )
         return data.get("items", [])
 
+    async def create_notebook(self, title: str, parent_id: str | None = None) -> dict:
+        payload: dict[str, str] = {"title": title}
+        if parent_id is not None:
+            payload["parent_id"] = parent_id
+        return await self._request("POST", "/folders", json=payload)
+
     async def delete_note(self, note_id: str) -> None:
         # Joplin moves the note to its trash rather than deleting it outright
         # unless `permanent=1` is passed; we deliberately don't expose that.
