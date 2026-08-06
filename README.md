@@ -223,6 +223,15 @@ nothing to read at the root. It also never grants read or write access to
 any real notebook — it's checked before name/id resolution runs, so it
 can't collide with an actual notebook, even one literally titled `$root`.
 
+Two edge cases worth knowing about `$root`: matching is exact and
+case-sensitive (unlike the case-insensitive name matching above), so a typo
+like `"$Root"` won't be recognized as the sentinel — it silently falls
+through to normal name/id resolution and matches nothing, rather than
+raising an error. And because `$root` is intercepted before name/id
+resolution runs, a real notebook titled `$root` can no longer be granted
+access by name in the `notebooks` list — use its id instead (from
+`list_notebooks`), same as with any other name collision.
+
 Out-of-scope access raises a `NotebookAccessError` with a message naming
 the notebook, distinct from a `JoplinError` (an actual Joplin API failure).
 
