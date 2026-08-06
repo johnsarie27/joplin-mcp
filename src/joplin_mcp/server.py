@@ -41,11 +41,13 @@ class NotebookAccess:
         write_all: bool,
         read_ids: frozenset[str],
         write_ids: frozenset[str],
+        can_create_root: bool = False,
     ) -> None:
         self._read_all = read_all or write_all
         self._write_all = write_all
         self._read_ids = read_ids
         self._write_ids = write_ids
+        self._can_create_root = can_create_root
 
     def can_read(self, notebook_id: str) -> bool:
         return self._read_all or notebook_id in self._read_ids or notebook_id in self._write_ids
@@ -53,19 +55,33 @@ class NotebookAccess:
     def can_write(self, notebook_id: str) -> bool:
         return self._write_all or notebook_id in self._write_ids
 
+    def can_create_root_notebook(self) -> bool:
+        # Root-level notebook creation isn't scoped to any existing notebook
+        # id, so it can't be answered by can_write() - it's gated by either
+        # blanket write access or the dedicated "$root" sentinel below.
+        return self._write_all or self._can_create_root
+
     def __bool__(self) -> bool:
         # `_read_all` already folds in `write_all` (write implies read), so
         # `_write_all` can never be true here while `_read_all` is false.
-        return self._read_all or bool(self._read_ids) or bool(self._write_ids)
+        return (
+            self._read_all
+            or bool(self._read_ids)
+            or bool(self._write_ids)
+            or self._can_create_root
+        )
 
 
 async def _notebook_access() -> NotebookAccess:
     # Each `notebooks` entry is {"id": <notebook id or name>, "access": "read"|"write"}.
-    # "id" may be "*" to mean all notebooks. Entries may be a name rather than an
-    # id (names aren't guaranteed unique - nested notebooks can share a title -
-    # resolved against the live notebook list since a name matching more than
-    # one notebook grants that access level to all of them). Missing "access"
-    # defaults to "read".
+    # "id" may be "*" to mean all notebooks, or the reserved sentinel "$root" to
+    # grant permission to create new notebooks at the root of the notebook tree
+    # (see create_notebook) - root creation isn't scoped to any existing notebook,
+    # so it can't be expressed as a real id/name the way other entries are.
+    # Entries may otherwise be a name rather than an id (names aren't guaranteed
+    # unique - nested notebooks can share a title - resolved against the live
+    # notebook list since a name matching more than one notebook grants that
+    # access level to all of them). Missing "access" defaults to "read".
     config = load_config()
     entries = config.get("notebooks", [])
     if not entries:
@@ -73,6 +89,7 @@ async def _notebook_access() -> NotebookAccess:
 
     read_all = False
     write_all = False
+    can_create_root = False
     raw_read: set[str] = set()
     raw_write: set[str] = set()
     for entry in entries:
@@ -86,13 +103,21 @@ async def _notebook_access() -> NotebookAccess:
                 write_all = True
             else:
                 read_all = True
+        elif raw_id == "$root":
+            # "$root" only carries a "write" meaning; a "read" entry for it
+            # is a no-op rather than an error, since there's nothing to read.
+            # Deliberately kept out of raw_write/raw_read so it never gets
+            # resolved against real notebook ids/names below - it must not
+            # grant access to any actual notebook.
+            if access == "write":
+                can_create_root = True
         elif access == "write":
             raw_write.add(raw_id)
         else:
             raw_read.add(raw_id)
 
     if not (raw_read or raw_write):
-        return NotebookAccess(read_all, write_all, frozenset(), frozenset())
+        return NotebookAccess(read_all, write_all, frozenset(), frozenset(), can_create_root)
 
     notebooks = await get_client().list_notebooks()
     ids = {n["id"] for n in notebooks}
@@ -109,7 +134,9 @@ async def _notebook_access() -> NotebookAccess:
                 resolved |= by_name.get(part.casefold(), set())
         return frozenset(resolved)
 
-    return NotebookAccess(read_all, write_all, resolve(raw_read), resolve(raw_write))
+    return NotebookAccess(
+        read_all, write_all, resolve(raw_read), resolve(raw_write), can_create_root
+    )
 
 
 async def _require_access() -> NotebookAccess:
@@ -247,6 +274,28 @@ async def list_notebooks() -> str:
     notebooks = await get_client().list_notebooks()
     lines = [f"- {n['title']} (id: {n['id']})" for n in notebooks]
     return f"{len(notebooks)} notebook(s):\n" + "\n".join(lines)
+
+
+@mcp.tool
+async def create_notebook(title: str, parent_id: str | None = None) -> str:
+    """Create a new notebook. Omit parent_id to create it at the root of the
+    notebook tree (requires a `$root` write entry in config, or blanket write
+    access); set parent_id to nest it inside an existing notebook (requires
+    write access to that notebook). Use list_notebooks to find a parent_id."""
+    access = await _require_access()
+    if parent_id is None:
+        if not access.can_create_root_notebook():
+            raise NotebookAccessError(
+                "Creating a root-level notebook requires "
+                '{"id": "$root", "access": "write"} (or blanket write access) '
+                "in the config's `notebooks` list."
+            )
+    elif not access.can_write(parent_id):
+        raise NotebookAccessError(
+            f"Notebook '{parent_id}' is not configured for write access."
+        )
+    notebook = await get_client().create_notebook(title, parent_id=parent_id)
+    return f"Created notebook '{notebook['title']}' (id: {notebook['id']})."
 
 
 @mcp.tool
