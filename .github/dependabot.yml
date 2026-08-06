@@ -7,6 +7,10 @@ updates:
       interval: "weekly"
       day: "sunday"
     open-pull-requests-limit: 10
+    groups:
+      uv-dependencies:
+        patterns:
+          - "*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -14,3 +18,7 @@ updates:
       interval: "weekly"
       day: "sunday"
     open-pull-requests-limit: 10
+    groups:
+      github-actions:
+        patterns:
+          - "*"
