@@ -26,8 +26,21 @@ src/joplin_mcp/
 
 ## Testing changes
 
-This project doesn't have an automated test suite yet. Verify changes
-manually against a running Joplin instance using the MCP inspector:
+Run the automated test suite:
+
+```bash
+uv run pytest
+```
+
+These tests mock the Joplin client entirely (see `tests/conftest.py`), so
+they cover config loading and the access-control logic in `server.py`
+without needing a running Joplin instance. Add cases here for any change
+touching `config.py` or the `NotebookAccess`/`_notebook_access` logic in
+`server.py`.
+
+For end-to-end checks against a real Joplin instance (new tool wiring,
+`client.py` changes, or anything the mocked tests can't cover), use the MCP
+inspector:
 
 ```bash
 npx @modelcontextprotocol/inspector uv run --directory /path/to/joplin-mcp joplin-mcp-server
@@ -35,11 +48,11 @@ npx @modelcontextprotocol/inspector uv run --directory /path/to/joplin-mcp jopli
 
 This opens a local web UI where you can call each tool and inspect the raw
 request/response. Exercise both the happy path and the access-control
-failure modes (see **Access control** in [README.md](README.md)) for any
-change touching `client.py` or `config.py`.
+failure modes (see **Access control** in [README.md](README.md)).
 
-`.github/workflows/codeql.yml` runs CodeQL static analysis on every push to
-`main` and on all pull requests.
+`.github/workflows/tests.yml` runs `pytest` and `.github/workflows/codeql.yml`
+runs CodeQL static analysis, both on every push to `main` and on all pull
+requests.
 
 ## Pull requests
 
