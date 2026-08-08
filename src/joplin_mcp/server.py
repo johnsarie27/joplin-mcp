@@ -64,12 +64,13 @@ class NotebookAccess:
     def __bool__(self) -> bool:
         # `_read_all` already folds in `write_all` (write implies read), so
         # `_write_all` can never be true here while `_read_all` is false.
-        return (
-            self._read_all
-            or bool(self._read_ids)
-            or bool(self._write_ids)
-            or self._can_create_root
-        )
+        # `_can_create_root` is deliberately excluded: this is only used by
+        # `_require_access()`'s fail-closed gate for note-content tools, and
+        # `$root` grants permission to create notebooks, not to read/write
+        # any note - it must not satisfy that gate on its own (see
+        # `create_notebook`, which checks `can_create_root_notebook()`
+        # directly instead of going through this gate).
+        return self._read_all or bool(self._read_ids) or bool(self._write_ids)
 
 
 async def _notebook_access() -> NotebookAccess:
@@ -282,7 +283,13 @@ async def create_notebook(title: str, parent_id: str | None = None) -> str:
     notebook tree (requires a `$root` write entry in config, or blanket write
     access); set parent_id to nest it inside an existing notebook (requires
     write access to that notebook). Use list_notebooks to find a parent_id."""
-    access = await _require_access()
+    # Deliberately uses `_notebook_access()` rather than `_require_access()`:
+    # the latter's fail-closed gate is scoped to note-content tools and
+    # would reject a `$root`-only config (no read/write access, just root
+    # creation) before we even get to the root-specific check below. The
+    # can_create_root_notebook()/can_write() checks already fail closed on
+    # their own for an empty config, so no separate gate is needed here.
+    access = await _notebook_access()
     if parent_id is None:
         if not access.can_create_root_notebook():
             raise NotebookAccessError(
