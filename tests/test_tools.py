@@ -181,6 +181,14 @@ async def test_update_note_section_multiple_matches_raises_with_snippets(
     assert not any(call[0] == "update_note" for call in fake_client.calls)
 
 
+async def test_update_note_section_match_is_case_sensitive(set_config, fake_client):
+    set_config([{"id": "Notebook A", "access": "write"}])
+    fake_client.note["body"] = "the Quick brown fox"
+    with pytest.raises(JoplinError):
+        await update_note_section(note_id="note-1", old_str="quick", new_str="slow")
+    assert not any(call[0] == "update_note" for call in fake_client.calls)
+
+
 async def test_update_note_section_requires_write_access(set_config, fake_client):
     set_config([{"id": "Notebook A", "access": "read"}])
     with pytest.raises(NotebookAccessError):
