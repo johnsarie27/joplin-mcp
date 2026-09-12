@@ -27,7 +27,9 @@ Web Clipper REST API.
 | `search_notes(query, limit=20)` | Full-text search |
 | `get_note(note_id)` | Fetch a note's full content |
 | `create_note(title, body, notebook_id)` | Create a new note |
-| `update_note(note_id, title=None, body=None)` | Edit an existing note |
+| `update_note(note_id, title=None, body=None)` | Edit an existing note (`body` replaces the whole note) |
+| `update_note_section(note_id, old_str, new_str)` | Replace one exact, unique substring within a note's body |
+| `append_note_section(note_id, content)` | Append content to the end of a note's body |
 | `delete_note(note_id)` | Delete a note (moves it to Joplin's trash) |
 | `complete_todo(note_id, completed=True)` | Mark a to-do note complete or incomplete |
 | `list_notes_in_notebook(notebook_id, limit=20)` | Browse a notebook's notes without a search query |
@@ -169,7 +171,8 @@ wiring it into a client — see **Testing changes** in
 
 ## Access control
 
-`search_notes`, `get_note`, `create_note`, `update_note`, `delete_note`,
+`search_notes`, `get_note`, `create_note`, `update_note`,
+`update_note_section`, `append_note_section`, `delete_note`,
 `complete_todo`, `list_notes_in_notebook`, `get_notes_by_tag`, and
 `create_notebook` are scoped by the `notebooks` list in `config.json`. Each
 entry is:
@@ -180,8 +183,9 @@ entry is:
 
 `access` is `"read"` (default if omitted) or `"write"` (implies read).
 `search_notes`/`get_note`/`list_notes_in_notebook`/`get_notes_by_tag`
-require `read`; `create_note`/`update_note`/`delete_note`/`complete_todo`
-require `write` on the relevant notebook. `create_notebook` follows the same
+require `read`; `create_note`/`update_note`/`update_note_section`/
+`append_note_section`/`delete_note`/`complete_todo` require `write` on the
+relevant notebook. `create_notebook` follows the same
 rule when nesting inside an existing notebook (`parent_id` set) — it
 requires `write` on that parent, same as `create_note`. Creating a notebook
 at the root (`parent_id` omitted) is different: it isn't scoped to any

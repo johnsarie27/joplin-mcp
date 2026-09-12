@@ -13,6 +13,13 @@ class FakeJoplinClient:
 
     def __init__(self):
         self.calls = []
+        self.note = {
+            "title": "Existing note",
+            "body": "body text",
+            "parent_id": "notebook-a-id",
+            "is_todo": 0,
+            "todo_completed": 0,
+        }
 
     async def list_notebooks(self):
         return NOTEBOOKS
@@ -27,14 +34,15 @@ class FakeJoplinClient:
 
     async def get_note(self, note_id):
         self.calls.append(("get_note", note_id))
-        return {
-            "id": note_id,
-            "title": "Existing note",
-            "body": "body text",
-            "parent_id": "notebook-a-id",
-            "is_todo": 0,
-            "todo_completed": 0,
-        }
+        return {"id": note_id, **self.note}
+
+    async def update_note(self, note_id, title=None, body=None):
+        self.calls.append(("update_note", note_id, title, body))
+        if title is not None:
+            self.note["title"] = title
+        if body is not None:
+            self.note["body"] = body
+        return {"id": note_id, **self.note}
 
 
 @pytest.fixture
