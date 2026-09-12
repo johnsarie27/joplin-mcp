@@ -153,6 +153,40 @@ async def _require_access() -> NotebookAccess:
     return access
 
 
+def _find_all_occurrences(body: str, old_str: str) -> list[int]:
+    """Return the start index of every non-overlapping occurrence of
+    `old_str` in `body` (same counting semantics as `str.count`)."""
+    indices: list[int] = []
+    start = 0
+    while True:
+        idx = body.find(old_str, start)
+        if idx == -1:
+            return indices
+        indices.append(idx)
+        start = idx + len(old_str)
+
+
+def _match_context(body: str, index: int, length: int, radius: int = 40) -> str:
+    """A bounded, single-line snippet around one match, for disambiguation
+    errors when a match isn't unique."""
+    lo = max(0, index - radius)
+    hi = min(len(body), index + length + radius)
+    snippet = body[lo:hi].replace("\n", "\\n")
+    prefix = "..." if lo > 0 else ""
+    suffix = "..." if hi < len(body) else ""
+    return f"{prefix}{snippet}{suffix}"
+
+
+def _append_with_separator(body: str, content: str) -> str:
+    """Append `content` to `body`, inserting a blank line between them
+    unless `body` is empty or already ends in one."""
+    if not body:
+        return content
+    if body.endswith("\n\n"):
+        return body + content
+    return body.rstrip("\n") + "\n\n" + content
+
+
 def _more_results_note(has_more: bool, limit: int) -> str:
     # `has_more` reflects Joplin's raw, unfiltered page - it says more results
     # exist, not that the caller can read them, so the message only claims
@@ -210,7 +244,12 @@ async def create_note(title: str, body: str, notebook_id: str) -> str:
 
 @mcp.tool
 async def update_note(note_id: str, title: str | None = None, body: str | None = None) -> str:
-    """Update an existing note's title and/or body. Only provided fields are changed."""
+    """Update an existing note's title and/or body. Only provided fields are
+    changed, but `body`, if provided, REPLACES the entire note body - it is
+    not a patch or append, and any content not included in `body` is lost.
+    For a targeted edit to part of a note, use update_note_section; to add
+    content to the end without resending the whole body, use
+    append_note_section."""
     access = await _require_access()
     existing = await get_client().get_note(note_id)
     if not access.can_write(existing["parent_id"]):
@@ -219,6 +258,56 @@ async def update_note(note_id: str, title: str | None = None, body: str | None =
             "is not configured for write access."
         )
     note = await get_client().update_note(note_id, title=title, body=body)
+    return f"Updated note '{note['title']}' (id: {note['id']})."
+
+
+@mcp.tool
+async def update_note_section(note_id: str, old_str: str, new_str: str) -> str:
+    """Replace an exact, unique substring within a note's body, without
+    touching the rest of the note. Fails with no write if old_str isn't
+    found, or if it matches more than once - use get_note to find a longer,
+    unique old_str in that case."""
+    if old_str == "":
+        raise JoplinError("old_str must not be empty.")
+    access = await _require_access()
+    existing = await get_client().get_note(note_id)
+    if not access.can_write(existing["parent_id"]):
+        raise NotebookAccessError(
+            f"Note '{note_id}' is in notebook '{existing['parent_id']}', which "
+            "is not configured for write access."
+        )
+    body = existing["body"]
+    indices = _find_all_occurrences(body, old_str)
+    if not indices:
+        raise JoplinError(f"'{old_str}' was not found in note '{note_id}'.")
+    if len(indices) > 1:
+        snippets = "\n".join(
+            f"- {_match_context(body, idx, len(old_str))}" for idx in indices
+        )
+        raise JoplinError(
+            f"'{old_str}' matches {len(indices)} times in note '{note_id}'; "
+            f"provide more surrounding context to make it unique. Matches:\n{snippets}"
+        )
+    idx = indices[0]
+    new_body = body[:idx] + new_str + body[idx + len(old_str) :]
+    note = await get_client().update_note(note_id, body=new_body)
+    return f"Updated note '{note['title']}' (id: {note['id']})."
+
+
+@mcp.tool
+async def append_note_section(note_id: str, content: str) -> str:
+    """Append content to the end of a note's body, without needing to know
+    or resend its existing content. Inserts a blank line separator unless
+    the note is empty or already ends in one."""
+    access = await _require_access()
+    existing = await get_client().get_note(note_id)
+    if not access.can_write(existing["parent_id"]):
+        raise NotebookAccessError(
+            f"Note '{note_id}' is in notebook '{existing['parent_id']}', which "
+            "is not configured for write access."
+        )
+    new_body = _append_with_separator(existing["body"], content)
+    note = await get_client().update_note(note_id, body=new_body)
     return f"Updated note '{note['title']}' (id: {note['id']})."
 
 
