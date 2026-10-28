@@ -19,6 +19,17 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#development-setup) and
 access-control logic in `server.py`; anything touching `client.py` or new
 tool wiring needs a manual pass with the MCP inspector (see CONTRIBUTING.md).
 
+## Secrets: never print `config.json`
+
+`config.json` (gitignored) holds the live Joplin API `token`. Anything an
+agent prints goes into the session transcript, so never expose the contents of
+that file (or any `JOPLIN_CONFIG` target) by any means. If you need its shape, read `config.example.json`
+instead; to check a specific key, load it in code and print only
+non-secret fields (key names, lengths, counts). In smoke-test scripts,
+print result sizes or status, never the config or request URLs containing
+the token. If the token is exposed, tell the user to regenerate it in Joplin
+(Settings → Web Clipper) and update `config.json`.
+
 ## PR merge requirements (repo ruleset, not just CI)
 
 `main` carries a GitHub ruleset — `require_code_owner_review: true` with
